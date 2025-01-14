@@ -4,20 +4,29 @@
 #include <vector>
 #include <cstring>
 #include <sstream>
-#include <bits/stdc++.h>
+#include <algorithm>
+#include <map>
+#include <set>
+#include <queue>
+#include <stack>
+#include <cmath>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <system_error>
 #include <omp.h>
 
-
+// Eigen includes
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
-#include "GenEigsSolver.h"
-#include "SymEigsSolver.h"
-#include "MatOp/SparseGenMatProd.h"
-#include "MatOp/SparseSymMatProd.h"
-
-
+#include <Eigen/Eigenvalues>
+#include "eigen/GenEigsSolver.h"
+#include "eigen/SymEigsSolver.h"
+#include "eigen/MatOp/SparseGenMatProd.h"
+#include "eigen/MatOp/SparseSymMatProd.h"
+#pragma clang diagnostic pop
 
 using namespace std;
 using namespace Eigen;
@@ -34,12 +43,24 @@ double median(VectorXd arr, int size){
    return (double)(arr[(size-1)/2] + arr[size/2])/2.0;
 }
 
+void createDir(const std::string& dirName) {
+    struct stat info;
+    if (stat(dirName.c_str(), &info) != 0) {  // Directory doesn't exist
+        #ifdef _WIN32
+            _mkdir(dirName.c_str());
+        #else
+            mkdir(dirName.c_str(), 0755);  // Read/write for owner, read for others
+        #endif
+    }
+}
 
 string line;
 
-
 int main(int argc, char *argv[]){
     
+    createDir("results");
+    createDir("pre_saved_EIG");
+
     if (argc != 2){
         cout << "Usage: ./cEIG <input_file>" << endl;
         return 0;
@@ -118,11 +139,10 @@ int main(int argc, char *argv[]){
     //SparseGenMatProd<double> op(mat);
     SparseSymMatProd<double> op(mat);
 
-    int iter = nodes / 2;
-    SymEigsSolver<SparseSymMatProd<double>> eigs (op, 2, 100);
+    SymEigsSolver<SparseSymMatProd<double>> eigs(op, 2, 100);
 
     eigs.init();
-    int nconv = eigs.compute(SortRule::SmallestAlge);
+    eigs.compute(SortRule::SmallestAlge);  // Remove nconv since we check success with info()
 
     Eigen::VectorXd evalues;
     Eigen::MatrixXd evecs;
@@ -130,7 +150,6 @@ int main(int argc, char *argv[]){
         evalues = eigs.eigenvalues();
         evecs = eigs.eigenvectors();
     }
-
     double median_eigenvalue = median(evecs.col(0), nodes);
     cout << "median eigenvalue: " << median_eigenvalue << endl;
 
