@@ -45,7 +45,6 @@ cd EIG-KL-Algorithm
 
 2. Build the project:
 ```bash
-make clean
 make
 ```
 
@@ -54,24 +53,6 @@ This will create two executables:
 - `KL`: Kernighan-Lin partitioning algorithm (OpenMP-enabled)
 
 ## Usage
-
-### Input File Format
-
-The input file should follow this structure:
-```
-<number_of_nets> <number_of_nodes>
-<node1> <node2> ... <nodeN>  # Net 1
-<node1> <node2> ... <nodeM>  # Net 2
-...
-```
-
-Example:
-```
-3 5
-1 2 3    # First net connecting nodes 1, 2, and 3
-2 4      # Second net connecting nodes 2 and 4
-3 4 5    # Third net connecting nodes 3, 4, and 5
-```
 
 ### Running the Algorithms
 
@@ -83,13 +64,13 @@ Example:
 2. Run KL algorithm:
 ```bash
 # Run KL with automatic thread detection
-./KL <input_file>
+./KL <circuit_input_file>
 
 # Run KL with EIG initialization
-./KL <input_file> -EIG
+./KL <circuit_input_file> -EIG
 
 # Run KL with specific number of threads
-OMP_NUM_THREADS=4 ./KL <input_file>
+OMP_NUM_THREADS=4 ./KL <circuit_input_file>
 ```
 
 ### Output Files
@@ -134,15 +115,23 @@ sudo cpupower frequency-set -g performance
 - Memory-efficient sparse matrix implementation
 - Smart termination conditions
 
-## Benchmarks
+## Input File Format
 
-| Benchmark | Total Cells | Cut Size | Runtime (s) | Improvement |
-|-----------|-------------|-----------|-------------|-------------|
-| Fract     | 149        | 21.5      | 0.01        | 22.5%      |
-| Industry2 | 12637      | 957.714   | 24.159      | 17.0%      |
-| Ibm01     | 12752      | 501.365   | 11.625      | 32.3%      |
-| Ibm10     | 69429      | 4048.24   | 617.88      | 22.6%      |
-| Ibm18     | 210613     | 3245.44   | 3178.55     | 19.6%      |
+The input file should follow this structure:
+```
+<number_of_nets> <number_of_nodes>
+<node1> <node2> ... <nodeN>  # Net 1
+<node1> <node2> ... <nodeM>  # Net 2
+...
+```
+
+Example:
+```
+3 5     # First line list the number of nets followed by the number of nodes in this circuit 
+1 2 3   # Net connecting nodes 1, 2, and 3
+2 4     # Net connecting nodes 2 and 4
+3 4 5   # Net connecting nodes 3, 4, and 5
+```
 
 ## Troubleshooting
 

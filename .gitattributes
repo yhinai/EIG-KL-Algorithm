@@ -1,2 +1,14 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Ignore the results directory
+results/*
+
+# Ignore the KL executable
+KL
+
+# Ignore the EIG executable
+EIG
+
+# Ignore macOS .DS_Store files
+.DS_Store

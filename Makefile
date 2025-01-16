@@ -16,7 +16,7 @@ EIG_TARGET = EIG
 KL_TARGET = KL
 
 # Default target
-all: directories $(EIG_TARGET) $(KL_TARGET)
+all: clean directories $(EIG_TARGET) $(KL_TARGET)
 
 # Create necessary directories
 directories:
@@ -34,6 +34,5 @@ $(KL_TARGET): $(KL_SRC)
 # Clean build files
 clean:
 	rm -f $(EIG_TARGET) $(KL_TARGET)
-	rm -rf results/*
 
 .PHONY: all clean directories
