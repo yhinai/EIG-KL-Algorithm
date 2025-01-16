@@ -105,7 +105,6 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
     spMat = sparseMatrix(nodesNum);
     
     long int nonZeroElements = 0;
-    long int numEdges = 0;
     vector<int> nodes;
     nodes.reserve(1000);  // Pre-allocate space
     
@@ -137,7 +136,6 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
                 
                 spMat.adjacencyList[node1][node2] += weight;
                 nonZeroElements++;
-                numEdges++;
             }
         }
     }
@@ -150,7 +148,6 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
     cout << "Matrix Dimensions:\n";
     cout << "  - Full matrix size: " << nodesNum << " x " << nodesNum << "\n";
     cout << "  - Non-zero elements: " << nonZeroElements << "\n";
-    cout << "  - Node-to-node edges: " << numEdges << "\n";
     
     cout << "\nMemory Usage:\n";
     cout << "  - Full matrix: " << fixed << setprecision(2) << fullMatrixSize << " MB\n";
@@ -328,159 +325,6 @@ void KL(sparseMatrix& spMat) {
     
     int iteration = 0;
     int terminate = 0;
-    // Increase termination limit for more thorough search
-    int terminateLimit = log2(spMat.nodeNum) * 2 + 10;
-    float globalMinCutSize = numeric_limits<float>::max();
-    
-    float cutSize = calCutSize(spMat);
-    float minCutSize = cutSize;
-    float initialCutSize = cutSize;
-    
-    cout << "\nInitial Partition Information:\n";
-    cout << "  - Left partition size: " << spMat.split[0].size() << "\n";
-    cout << "  - Right partition size: " << spMat.split[1].size() << "\n";
-    cout << "  - Initial cut size: " << cutSize << "\n\n";
-    
-    fout << "0\t" << cutSize << "\t0" << endl;
-    
-    cout << "Initializing node gains...\n";
-    #pragma omp parallel for schedule(dynamic)
-    for (size_t i = 0; i < spMat.nodeNum; i++) {
-        spMat.nodeGains[i] = connections(spMat, i);
-    }
-    
-    cout << "\n============= KL Iterations =============\n";
-    cout << setw(10) << "Iteration" 
-         << setw(15) << "Cut Size" 
-         << setw(15) << "Gain"
-         << setw(15) << "Best Cut"
-         << setw(12) << "Left"
-         << setw(12) << "Right"
-         << setw(15) << "Time (ms)" 
-         << setw(15) << "Improvement" << "\n";
-    cout << string(109, '-') << "\n";
-    
-    auto total_start_time = chrono::high_resolution_clock::now();
-    int stagnantCount = 0;
-    float prevBestCut = initialCutSize;
-    
-    // Increase number of attempts to find better solution
-    const int maxStagnantIterations = 3;  // Number of full cycles without improvement before stopping
-    int currentCycle = 0;
-    
-    while (currentCycle < maxStagnantIterations) {
-        while (!spMat.remain[0].empty() && !spMat.remain[1].empty()) {
-            auto start_time = chrono::high_resolution_clock::now();
-            
-            float maxGain = -numeric_limits<float>::max();
-            float minGain = numeric_limits<float>::max();
-            int maxIdx = -1, minIdx = -1;
-            
-            // Find maximum gain in partition 0
-            for (size_t i = 0; i < spMat.remain[0].size(); i++) {
-                int node = spMat.remain[0][i];
-                if (spMat.nodeGains[node] > maxGain) {
-                    maxGain = spMat.nodeGains[node];
-                    maxIdx = i;
-                }
-            }
-            
-            // Find minimum gain in partition 1
-            for (size_t i = 0; i < spMat.remain[1].size(); i++) {
-                int node = spMat.remain[1][i];
-                if (spMat.nodeGains[node] < minGain) {
-                    minGain = spMat.nodeGains[node];
-                    minIdx = i;
-                }
-            }
-            
-            if (maxIdx >= 0 && minIdx >= 0) {
-                int node1 = spMat.remain[0][maxIdx];
-                int node2 = spMat.remain[1][minIdx];
-                float gain = maxGain - minGain - 2 * getEdgeWeight(spMat, node1, node2);
-                
-                cutSize -= gain;
-                minCutSize = min(minCutSize, cutSize);
-                globalMinCutSize = min(globalMinCutSize, minCutSize);
-                
-                // Swap nodes and update affected nodes
-                swip(spMat, node1, node2);
-                updateAffectedNodeGains(spMat, node1, node2);
-                
-                auto end_time = chrono::high_resolution_clock::now();
-                auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
-                
-                iteration++;
-                float improvement = 100.0f * (1.0f - globalMinCutSize/initialCutSize);
-                
-                cout << setw(10) << iteration 
-                     << setw(15) << fixed << setprecision(2) << cutSize 
-                     << setw(15) << fixed << setprecision(2) << gain
-                     << setw(15) << fixed << setprecision(2) << globalMinCutSize
-                     << setw(12) << spMat.split[0].size()
-                     << setw(12) << spMat.split[1].size()
-                     << setw(15) << duration.count()
-                     << setw(15) << fixed << setprecision(2) << improvement << "%\n";
-                     
-                fout << iteration << "\t" << cutSize << "\t" << gain << endl;
-                
-                if (gain <= 0) {
-                    if (++terminate > terminateLimit) break;
-                } else {
-                    terminate = 0;
-                }
-            } else {
-                break;
-            }
-        }
-        
-        // Check if we've improved the best cut size
-        if (abs(prevBestCut - globalMinCutSize) < 1e-6) {
-            currentCycle++;
-        } else {
-            currentCycle = 0;
-            prevBestCut = globalMinCutSize;
-        }
-        
-        // If we're continuing, reshuffle the remaining nodes
-        if (currentCycle < maxStagnantIterations) {
-            shuffleSparceMatrix(spMat);
-            cout << "\nRestarting with new partition (Cycle " << currentCycle + 1 << "/" 
-                 << maxStagnantIterations << ")...\n\n";
-        }
-    }
-    
-    auto total_end_time = chrono::high_resolution_clock::now();
-    auto total_duration = chrono::duration_cast<chrono::seconds>(total_end_time - total_start_time);
-    
-    cout << "\n============= Final Results =============\n";
-    cout << "  - Total iterations: " << iteration << "\n";
-    cout << "  - Initial cut size: " << initialCutSize << "\n";
-    cout << "  - Best cut size achieved: " << globalMinCutSize << "\n";
-    cout << "  - Final partition sizes: Left=" << spMat.split[0].size() 
-         << ", Right=" << spMat.split[1].size() << "\n";
-    cout << "  - Overall improvement: " << fixed << setprecision(2) 
-         << 100.0 * (1.0 - globalMinCutSize/initialCutSize) << "%\n";
-    cout << "  - Total runtime: " << total_duration.count() << " seconds\n";
-    cout << "=========================================\n\n";
-    
-    fout.close();
-}
-    cout << "\n============= Starting KL Algorithm =============\n";
-    shuffleSparceMatrix(spMat);
-    
-    // Initialize node connections cache
-    cout << "Initializing node connections cache...\n";
-    spMat.initNodeConnections();
-    
-    ofstream fout(fout_name);
-    if (!fout.is_open()) {
-        cerr << "Error: Cannot open output file" << endl;
-        exit(1);
-    }
-    
-    int iteration = 0;
-    int terminate = 0;
     int terminateLimit = log2(spMat.nodeNum) + 5;
     float globalMinCutSize = numeric_limits<float>::max();
     
@@ -581,7 +425,6 @@ void KL(sparseMatrix& spMat) {
     cout << "\n============= Final Results =============\n";
     cout << "  - Total iterations: " << iteration << "\n";
     cout << "  - Initial cut size: " << initialCutSize << "\n";
-    cout << "  - Final cut size: " << cutSize << "\n";
     cout << "  - Best cut size achieved: " << globalMinCutSize << "\n";
     cout << "  - Overall improvement: " << fixed << setprecision(2) 
          << 100.0 * (1.0 - globalMinCutSize/initialCutSize) << "%\n";
