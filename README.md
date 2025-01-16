@@ -1,77 +1,57 @@
 # Circuit Partitioning using EIG+KL Hybrid Algorithm
 
-A high-performance circuit partitioning solution that combines Eigenvalue (EIG) and Kernighan-Lin (KL) algorithms to optimize ratio cuts while maintaining balanced partitions. This implementation leverages sparse matrix operations, efficient eigenvector computation, and parallel processing to achieve significant performance improvements.
+A high-performance circuit partitioning solution combining Eigenvalue (EIG) and Kernighan-Lin (KL) algorithms to optimize ratio cuts while maintaining balanced partitions. This implementation leverages sparse matrix operations, efficient eigenvector computation, and parallel processing.
 
 ## Overview
 
-This project implements a hybrid approach to circuit partitioning by combining:
+The project implements a hybrid approach to circuit partitioning by combining:
 - Eigenvalue-based initial partitioning (EIG)
 - Kernighan-Lin optimization (KL)
 - Sparse matrix optimizations
 - OpenMP parallel processing
 
-The implementation shows significant improvements in both cut size quality (>20% improvement) and runtime performance, particularly for large benchmarks like IBM18.
-
-
-## Features
-
-### Core Components
-
-- **Eigenvalue (EIG) Algorithm**
-  - Sparse matrix representation using Eigen library
-  - Efficient Laplacian matrix computation
-  - Second smallest eigenvalue and eigenvector calculation
-  - Area-balanced partitioning constraints
-
-- **Kernighan-Lin (KL) Algorithm**
-  - Optimized gain calculation system
-  - Dynamic cut size computation
-  - OpenMP parallel processing support
-  - Memory-efficient sparse matrix implementation
-  - Smart termination conditions
-
-- **Performance Optimizations**
-  - Multi-threaded execution using OpenMP
-  - Sparse matrix operations for memory efficiency
-  - Optimized data structures for large circuits
-  - Hybrid approach combining EIG initial partitioning with KL refinement
-
 ## Prerequisites
 
-- C++17 compatible compiler
-- LLVM Clang compiler (for OpenMP support)
-- Eigen library (Included in this repo)
-- Homebrew (for macOS dependencies)
-
-### Required Libraries
+The following packages are required (Ubuntu):
 
 ```bash
-# Install using Homebrew (macOS)
-brew install llvm
-brew install eigen
+# Install essential build tools and libraries
+sudo apt-get update
+sudo apt-get install -y \
+    build-essential \
+    cmake \
+    libomp-dev \
+    liblapack-dev \
+    liblapacke-dev \
+    libblas-dev \
+    libeigen3-dev
+    
+# Install Spectra library
+cd /tmp
+git clone https://github.com/yixuan/spectra.git
+cd spectra
+mkdir build && cd build
+cmake ..
+sudo make install
 ```
 
 ## Building the Project
 
-1. **Clone the Repository**
+1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/EIG-KL-Hybrid-Algorithm-Accelerator.git
-cd EIG-KL-Hybrid-Algorithm-Accelerator
+git clone https://github.com/yourusername/EIG-KL-Algorithm.git
+cd EIG-KL-Algorithm
 ```
 
-2. **Build Using Make**
+2. Build the project:
 ```bash
-# Build all targets
-make
-
-# Build specific targets
-make EIG                  # Build EIG algorithm
-make KL_single_thread     # Build single-threaded KL
-make KL_multi_thread_omp  # Build multi-threaded KL
-
-# Clean build files
 make clean
+make
 ```
+
+This will create two executables:
+- `EIG`: Eigenvalue-based partitioning algorithm
+- `KL`: Kernighan-Lin partitioning algorithm (OpenMP-enabled)
 
 ## Usage
 
@@ -95,95 +75,89 @@ Example:
 
 ### Running the Algorithms
 
-1. **EIG Algorithm**
+1. Run EIG algorithm:
 ```bash
 ./EIG <input_file>
 ```
 
-2. **Kernighan-Lin Algorithm**
+2. Run KL algorithm:
 ```bash
-# Single-threaded version
-./KL_single_thread <input_file>
+# Run KL with automatic thread detection
+./KL <input_file>
 
-# Multi-threaded version
-./KL_multi_thread_omp <input_file>
+# Run KL with EIG initialization
+./KL <input_file> -EIG
 
-# Using EIG solution as initial partition
-./KL_multi_thread_omp <input_file> -EIG
+# Run KL with specific number of threads
+OMP_NUM_THREADS=4 ./KL <input_file>
 ```
 
 ### Output Files
 
 The algorithms generate output files in the `results/` directory:
-
 - `results/<input_file>_out.txt`: EIG partitioning results
 - `results/<input_file>_KL_CutSize_output.txt`: KL algorithm results
 - `results/<input_file>_KL_CutSize_EIG_output.txt`: Hybrid EIG+KL results
 
+## Performance Optimization
+
+For best performance:
+
+1. Adjust OpenMP threads based on your system:
+```bash
+# Use all available cores
+export OMP_NUM_THREADS=$(nproc)
+
+# Or specify a specific number
+export OMP_NUM_THREADS=4
+```
+
+2. Enable performance mode (requires root):
+```bash
+sudo cpupower frequency-set -g performance
+```
+
 ## Implementation Details
 
-### EIG Algorithm (cEIG.cpp)
+### EIG Algorithm
 
-- Uses Eigen and Spectra libraries for efficient matrix operations
-- Implements sparse matrix representation for memory efficiency
+- Uses Eigen and Spectra libraries for efficient sparse matrix operations
 - Computes the second smallest eigenvalue and corresponding eigenvector
-- Supports parallel processing through OpenMP
+- Implements parallel processing through OpenMP
+- Memory-efficient sparse matrix representation
 
+### KL Algorithm
 
-### KL Algorithm (cKL.cpp)
+- Optimized gain calculation with parallel processing
+- Dynamic cut size computation
+- OpenMP parallel processing support
+- Memory-efficient sparse matrix implementation
+- Smart termination conditions
 
-- Implements an optimized sparse matrix representation
-- Uses OpenMP for parallel gain calculations
-- Provides dynamic termination conditions
-- Supports both random and EIG-based initial partitioning
+## Benchmarks
 
+| Benchmark | Total Cells | Cut Size | Runtime (s) | Improvement |
+|-----------|-------------|-----------|-------------|-------------|
+| Fract     | 149        | 21.5      | 0.01        | 22.5%      |
+| Industry2 | 12637      | 957.714   | 24.159      | 17.0%      |
+| Ibm01     | 12752      | 501.365   | 11.625      | 32.3%      |
+| Ibm10     | 69429      | 4048.24   | 617.88      | 22.6%      |
+| Ibm18     | 210613     | 3245.44   | 3178.55     | 19.6%      |
 
-## Project Structure
-```
-.
-├── cEIG.cpp                # EIG algorithm implementation
-├── cKL.cpp                 # KL algorithm implementation
-├── Makefile               # Build configuration
-├── results/               # Generated output files
-├── pre_saved_EIG/        # Pre-computed EIG results
-└── eigen/                # Eigen library headers
-```
+## Troubleshooting
 
-## Performance Metrics
+1. OpenMP Issues:
+   - Verify installation: `echo |cpp -fopenmp -dM |grep -i open`
+   - Check number of threads: `OMP_NUM_THREADS=4 ./KL <input_file>`
 
-### EIG Results
+2. Library Issues:
+   ```bash
+   # Reinstall dependencies if needed
+   sudo apt-get install --reinstall \
+       libomp-dev liblapack-dev liblapacke-dev libblas-dev libeigen3-dev
+   ```
 
-| Benchmark | Total Cells | Left Partition | Right Partition | CutSize | RatioCut | Runtime (s) |
-|-----------|-------------|----------------|-----------------|---------|-----------|-------------|
-| Fract     | 149         | 75            | 74             | 27.75   | 5e-3      | 0.5         |
-| Industry2 | 12637       | 6319          | 6318           | 1153.63 | 2.89e-5   | 432         |
-| Ibm01     | 12752       | 6376          | 6376           | 740.948 | 1.82e-5   | 31          |
-| Ibm10     | 69429       | 34715         | 34714          | 5229.01 | 4.34e-6   | 3227        |
-| Ibm18     | 210613      | 105307        | 105306         | 4038.83 | 3.6e-7    | 37758       |
-
-### EIG+KL Hybrid Results
-
-| Benchmark | Total Cells | Left Partition | Right Partition | CutSize | RatioCut | Runtime (s) |
-|-----------|-------------|----------------|-----------------|---------|-----------|-------------|
-| Fract     | 149         | 75            | 74             | 21.5    | 5e-3      | 0.01        |
-| Industry2 | 12637       | 6319          | 6318           | 957.714 | 2.89e-5   | 24.159      |
-| Ibm01     | 12752       | 6376          | 6376           | 501.365 | 1.82e-5   | 11.625      |
-| Ibm10     | 69429       | 34715         | 34714          | 4048.24 | 4.34e-6   | 617.88      |
-| Ibm18     | 210613      | 105307        | 105306         | 3245.44 | 3.6e-7    | 3178.55     |
-
-## Key Findings
-
-1. The hybrid EIG+KL approach shows significant improvements:
-   - Cut size reduction of >20% across benchmarks
-   - Runtime improvements up to 90% for large circuits
-   - Better scalability for larger benchmarks
-
-2. Sparse matrix optimizations proved crucial:
-   - Reduced memory usage for large circuits
-   - Improved computation efficiency
-   - Better handling of sparse connectivity patterns
-
-3. Performance characteristics:
-   - KL heuristics improve timing for most benchmarks
-   - Hybrid computation provides better results consistently
-   - Large benchmark partitioning requires significant computational resources
+3. Compilation Issues:
+   - Clean and rebuild: `make clean && make`
+   - Check compiler version: `g++ --version`
+   - Verify Spectra installation: `ls /usr/local/include/Spectra`

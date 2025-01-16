@@ -1,30 +1,39 @@
-# Get LLVM and Eigen paths from Homebrew
-LLVM_PATH := $(shell brew --prefix llvm)
-EIGEN_PATH := $(shell brew --prefix eigen)
-
 # Compiler settings
-CXX = $(LLVM_PATH)/bin/clang++
-CXXFLAGS = -std=c++17 -Wall -O3
+CXX ?= g++
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -I/usr/include/eigen3 -I/usr/local/include/spectra
+LDFLAGS = -llapack -lblas -llapacke
+
+# OpenMP settings
 OMPFLAGS = -fopenmp
-EIGENFLAGS = -I$(EIGEN_PATH)/include/eigen3 -I.
-LLVM_FLAGS = -L$(LLVM_PATH)/lib -Wl,-rpath,$(LLVM_PATH)/lib
+OMPLIBS = -lomp
 
-# OpenMP settings for clang
-OMPLIB = -L$(LLVM_PATH)/lib
+# Source files
+EIG_SRC = cEIG.cpp
+KL_SRC = cKL.cpp
 
-all: EIG KL_single_thread KL_multi_thread_omp
+# Output executables
+EIG_TARGET = EIG
+KL_TARGET = KL
 
-EIG: cEIG.cpp
-	$(CXX) $(CXXFLAGS) $(EIGENFLAGS) $(LLVM_FLAGS) $< -o $@
+# Default target
+all: directories $(EIG_TARGET) $(KL_TARGET)
 
-KL_single_thread: cKL.cpp
-	$(CXX) $(CXXFLAGS) $(LLVM_FLAGS) $< -o $@
+# Create necessary directories
+directories:
+	@mkdir -p results
+	@mkdir -p pre_saved_EIG
 
-KL_multi_thread_omp: cKL.cpp
-	$(CXX) $(CXXFLAGS) $(OMPFLAGS) $(LLVM_FLAGS) $(OMPLIB) -DUSE_OPENMP $< -o $@
+# EIG algorithm
+$(EIG_TARGET): $(EIG_SRC)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) $< -o $@ $(LDFLAGS) $(OMPLIBS)
 
+# KL algorithm
+$(KL_TARGET): $(KL_SRC)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) $< -o $@ $(LDFLAGS) $(OMPLIBS)
+
+# Clean build files
 clean:
-	rm -f EIG KL_single_thread KL_multi_thread_omp
-	rm -f results/*
+	rm -f $(EIG_TARGET) $(KL_TARGET)
+	rm -rf results/*
 
-.PHONY: all clean
+.PHONY: all clean directories
