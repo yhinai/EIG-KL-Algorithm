@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <system_error>
 #include <omp.h>
+#include <filesystem>
 
 #ifdef __clang__
     #pragma clang diagnostic push
@@ -59,6 +60,12 @@ void createDir(const std::string& dirName) {
     }
 }
 
+// Add function to get base filename
+string getBaseName(const string& path) {
+    filesystem::path fp(path);
+    return fp.filename().string();
+}
+
 int main(int argc, char *argv[]) {
     createDir("results");
     createDir("pre_saved_EIG");
@@ -75,7 +82,8 @@ int main(int argc, char *argv[]) {
     cout << "Number of threads: " << n << endl;
     
     string filename = argv[1];
-    string outfile = "results/" + filename + "_out.txt";
+    string base_name = getBaseName(filename);  // Get base filename
+    string outfile = "pre_saved_EIG/" + base_name + "_out.txt";  // Save in pre_saved_EIG directory
 
     ifstream fin(filename.c_str());
     ofstream fout(outfile.c_str());

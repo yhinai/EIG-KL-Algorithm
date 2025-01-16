@@ -31,7 +31,8 @@ cd /tmp
 git clone https://github.com/yixuan/spectra.git
 cd spectra
 mkdir build && cd build
-cmake ..
+# Configure CMake to install in the system directory
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
 sudo make install
 ```
 

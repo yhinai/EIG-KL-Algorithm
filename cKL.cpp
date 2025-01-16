@@ -15,7 +15,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <numeric>
-#include <iomanip>  // For setw and setprecision
+#include <iomanip>
+#include <filesystem>
 
 #ifdef _OPENMP
     #include <omp.h>
@@ -445,8 +446,13 @@ void createDir(const string& dirName) {
     }
 }
 
+string getBaseName(const string& path) {
+    filesystem::path fp(path);
+    return fp.filename().string();
+}
+
 int main(int argc, char *argv[]) {
-    ios_base::sync_with_stdio(false);  // Optimize I/O operations
+    ios_base::sync_with_stdio(false);
     cin.tie(nullptr);
     
     createDir("results");
@@ -458,12 +464,13 @@ int main(int argc, char *argv[]) {
     }
 
     string input_file = argv[1];
-    fout_name = "results/" + input_file + "_KL_CutSize_output.txt";
+    string base_name = getBaseName(input_file);  // Extract just the filename without path
+    fout_name = "results/" + base_name + "_KL_CutSize_output.txt";
 
     if (argc == 3 && strcmp(argv[2], "-EIG") == 0) {
         EIG_init = true;
-        EIG_file = "pre_saved_EIG/" + input_file + "_out.txt";
-        fout_name = "results/" + input_file + "_KL_CutSize_EIG_output.txt";
+        EIG_file = "pre_saved_EIG/" + base_name + "_out.txt";
+        fout_name = "results/" + base_name + "_KL_CutSize_EIG_output.txt";
     }
 
     try {

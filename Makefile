@@ -1,38 +1,68 @@
-# Compiler settings
-CXX ?= g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -I/usr/include/eigen3 -I/usr/local/include/spectra
-LDFLAGS = -llapack -lblas -llapacke
+# Compiler and flags
+CXX = g++
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -I/usr/include/eigen3 -I/usr/local/include/spectra -fopenmp
 
-# OpenMP settings
-OMPFLAGS = -fopenmp
-OMPLIBS = -lomp
+# Libraries
+LIBS = -llapack -lblas -llapacke -lomp
 
-# Source files
-EIG_SRC = cEIG.cpp
-KL_SRC = cKL.cpp
+# Targets
+.PHONY: all clean deps check_dependencies install_system_deps install_spectra build
 
-# Output executables
-EIG_TARGET = EIG
-KL_TARGET = KL
+# Main target
+all: check_dependencies build
 
-# Default target
-all: clean directories $(EIG_TARGET) $(KL_TARGET)
+# Build target for actual compilation
+build: clean EIG KL
 
-# Create necessary directories
-directories:
-	@mkdir -p results
-	@mkdir -p pre_saved_EIG
+EIG: cEIG.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
 
-# EIG algorithm
-$(EIG_TARGET): $(EIG_SRC)
-	$(CXX) $(CXXFLAGS) $(OMPFLAGS) $< -o $@ $(LDFLAGS) $(OMPLIBS)
+KL: cKL.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
 
-# KL algorithm
-$(KL_TARGET): $(KL_SRC)
-	$(CXX) $(CXXFLAGS) $(OMPFLAGS) $< -o $@ $(LDFLAGS) $(OMPLIBS)
+# Dependencies management
 
-# Clean build files
+install_system_deps:
+	@echo "Installing system dependencies..."
+	@if ! command -v apt-get &> /dev/null; then \
+		echo "Error: apt-get not found. This Makefile requires Ubuntu/Debian."; \
+		exit 1; \
+	fi
+	sudo apt-get update
+	sudo apt-get install -y \
+		build-essential \
+		cmake \
+		libomp-dev \
+		liblapack-dev \
+		liblapacke-dev \
+		libblas-dev \
+		libeigen3-dev
+
+install_spectra:
+	@echo "Installing Spectra library..."
+	@if [ ! -d "/usr/local/include/Spectra" ]; then \
+		echo "Spectra not found. Installing..."; \
+		cd /tmp && \
+		rm -rf spectra && \
+		git clone https://github.com/yixuan/spectra.git && \
+		cd spectra && \
+		mkdir -p build && \
+		cd build && \
+		cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && \
+		sudo make install; \
+	else \
+		echo "Spectra already installed."; \
+	fi
+
+check_dependencies:
+	@if [ ! -d "/usr/include/eigen3" ]; then \
+		echo "Eigen3 not found. Installing dependencies..."; \
+		$(MAKE) install_system_deps; \
+	fi
+	@if [ ! -d "/usr/local/include/Spectra" ]; then \
+		echo "Spectra not found. Installing..."; \
+		$(MAKE) install_spectra; \
+	fi
+
 clean:
-	rm -f $(EIG_TARGET) $(KL_TARGET)
-
-.PHONY: all clean directories
+	rm -f EIG KL
