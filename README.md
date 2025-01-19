@@ -40,7 +40,7 @@ sudo make install
 
 1. Clone the repository:
 ```bash
-git clone --branch linux https://github.com/yahya-alhinai/EIG-KL-Algorithm.git
+git clone --branch linux https://github.com/yhinai/EIG-KL-Algorithm.git
 cd EIG-KL-Algorithm
 ```
 
