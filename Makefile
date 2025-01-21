@@ -3,7 +3,7 @@ CXX = g++
 CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -I/usr/include/eigen3 -I/usr/local/include/spectra -fopenmp
 
 # Libraries
-LIBS = -llapack -lblas -llapacke -lomp
+LIBS = -llapack -lblas -llapacke
 
 # Targets
 .PHONY: all clean deps check_dependencies install_system_deps install_spectra build
