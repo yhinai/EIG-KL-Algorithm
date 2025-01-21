@@ -55,7 +55,7 @@ brew install eigen
 
 1. **Clone the Repository**
 ```bash
-git clone https://github.com/yhinai/EIG-KL-Hybrid-Algorithm-Accelerator.git
+git clone --branch macOS https://github.com/yhinai/EIG-KL-Hybrid-Algorithm-Accelerator.git
 cd EIG-KL-Hybrid-Algorithm-Accelerator
 ```
 
