@@ -12,41 +12,54 @@ The project implements a hybrid approach to circuit partitioning by combining:
 
 ## Prerequisites
 
-The following packages are required (Ubuntu):
+This project uses Conda for dependency management. Make sure you have Conda installed on your system. If not, you can install Miniconda from [here](https://docs.conda.io/en/latest/miniconda.html).
 
 ```bash
+# Download and install the latest Miniconda (Linux AMD64)
+mkdir -p ~/miniconda3
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+rm ~/miniconda3/miniconda.sh
+
+# Initialize conda on all shells
+source ~/miniconda3/bin/activate
+conda init --all
+
+```
+## Environment Setup
+
+```bash
+# Clone the repository:
+git clone https://github.com/yhinai/EIG-KL-Algorithm.git
+cd EIG-KL-Algorithm
+
+# Create a new conda environment
+conda create --name KL -y
+conda activate KL
+
 # Install essential build tools and libraries
-sudo apt-get update
-sudo apt-get install -y \
-    build-essential \
+conda install -c conda-forge -y \
     cmake \
-    libomp-dev \
-    liblapack-dev \
-    liblapacke-dev \
-    libblas-dev \
-    libeigen3-dev
-    
-# Install Spectra library
-cd /tmp
+    openmp \
+    lapack \
+    blas \
+    eigen
+
+# Clone and install Spectra
 git clone https://github.com/yixuan/spectra.git
 cd spectra
 mkdir build && cd build
-# Configure CMake to install in the system directory
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
-sudo make install
-```
+cmake .. -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+make install
+cd ../..
+rm -rf spectra
 
-## Building the Project
+# Add conda library path to LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yhinai/EIG-KL-Algorithm.git
-cd EIG-KL-Algorithm
-```
-
-2. Build the project:
-```bash
+# Build the project
 make
+
 ```
 
 This will create two executables:
@@ -137,17 +150,43 @@ Example:
 ## Troubleshooting
 
 1. OpenMP Issues:
-   - Verify installation: `echo |cpp -fopenmp -dM |grep -i open`
-   - Check number of threads: `OMP_NUM_THREADS=4 ./KL <input_file>`
+   - Verify OpenMP is installed: `conda list openmp`
+   - Check number of threads: `echo $OMP_NUM_THREADS`
 
 2. Library Issues:
    ```bash
    # Reinstall dependencies if needed
-   sudo apt-get install --reinstall \
-       libomp-dev liblapack-dev liblapacke-dev libblas-dev libeigen3-dev
+   conda install -c conda-forge --force-reinstall \
+       openmp lapack blas eigen
    ```
 
 3. Compilation Issues:
    - Clean and rebuild: `make clean && make`
    - Check compiler version: `g++ --version`
-   - Verify Spectra installation: `ls /usr/local/include/Spectra`
+   - Verify Spectra installation: `ls $CONDA_PREFIX/include/Spectra`
+   - Make sure environment is activated: `conda activate KL`
+
+4. Library Path Issues:
+   - Verify library path: `echo $LD_LIBRARY_PATH`
+   - Reset library path if needed:
+     ```bash
+     export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+     ```
+
+## Environment Management
+
+To save the environment configuration:
+```bash
+conda env export > environment.yml
+```
+
+To recreate the environment on another machine:
+```bash
+conda env create -f environment.yml
+```
+
+To remove the environment:
+```bash
+conda deactivate
+conda env remove -n KL
+```

@@ -1,68 +1,63 @@
+# Check if CONDA_PREFIX is set
+ifndef CONDA_PREFIX
+$(error CONDA_PREFIX is not set. Please activate your conda environment first: conda activate KL)
+endif
+
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -I/usr/include/eigen3 -I/usr/local/include/spectra -fopenmp
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra \
+           -I$(CONDA_PREFIX)/include \
+           -I$(CONDA_PREFIX)/include/eigen3 \
+           -fopenmp
 
 # Libraries
-LIBS = -llapack -lblas -llapacke
+LIBS = -L$(CONDA_PREFIX)/lib -llapack -lblas -llapacke
+
+# Output directories
+DIRS = results
 
 # Targets
-.PHONY: all clean deps check_dependencies install_system_deps install_spectra build
+.PHONY: all clean check_env build
 
-# Main target
-all: check_dependencies build
+# Default target
+all: clean_binary check_env build
 
-# Build target for actual compilation
-build: clean EIG KL
-
-EIG: cEIG.cpp
-	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
-
-KL: cKL.cpp
-	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
-
-# Dependencies management
-
-install_system_deps:
-	@echo "Installing system dependencies..."
-	@if ! command -v apt-get &> /dev/null; then \
-		echo "Error: apt-get not found. This Makefile requires Ubuntu/Debian."; \
+# Check conda environment
+check_env:
+	@if [ -z "$$CONDA_PREFIX" ]; then \
+		echo "Error: CONDA_PREFIX is not set. Please activate your conda environment."; \
 		exit 1; \
 	fi
-	sudo apt-get update
-	sudo apt-get install -y \
-		build-essential \
-		cmake \
-		libomp-dev \
-		liblapack-dev \
-		liblapacke-dev \
-		libblas-dev \
-		libeigen3-dev
-
-install_spectra:
-	@echo "Installing Spectra library..."
-	@if [ ! -d "/usr/local/include/Spectra" ]; then \
-		echo "Spectra not found. Installing..."; \
-		cd /tmp && \
-		rm -rf spectra && \
-		git clone https://github.com/yixuan/spectra.git && \
-		cd spectra && \
-		mkdir -p build && \
-		cd build && \
-		cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && \
-		sudo make install; \
-	else \
-		echo "Spectra already installed."; \
+	@if [ ! -d "$(CONDA_PREFIX)/include/eigen3" ]; then \
+		echo "Error: Eigen3 not found. Please install required dependencies."; \
+		echo "Run: conda install -c conda-forge eigen"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(CONDA_PREFIX)/include/Spectra" ]; then \
+		echo "Error: Spectra not found. Please install Spectra library."; \
+		echo "See README.md for installation instructions."; \
+		exit 1; \
 	fi
 
-check_dependencies:
-	@if [ ! -d "/usr/include/eigen3" ]; then \
-		echo "Eigen3 not found. Installing dependencies..."; \
-		$(MAKE) install_system_deps; \
-	fi
-	@if [ ! -d "/usr/local/include/Spectra" ]; then \
-		echo "Spectra not found. Installing..."; \
-		$(MAKE) install_spectra; \
-	fi
 
-clean:
+# Build target for actual compilation
+build: EIG KL
+	@echo
+# Compile EIG executable
+EIG: cEIG.cpp
+	@echo "Building EIG:" 
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
+	@echo
+
+# Compile KL executable
+KL: cKL.cpp
+	@echo "Building KL:" 
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
+	@echo
+
+# Clean target
+clean_binary:
 	rm -f EIG KL
+
+clean: clean_binary
+	rm -rf $(DIRS)
