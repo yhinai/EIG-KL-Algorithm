@@ -147,6 +147,39 @@ Example:
 3 4 5   # Net connecting nodes 3, 4, and 5
 ```
 
+
+## Environment Management
+
+To activate conda environment:
+```bash
+conda activate KL
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+```
+
+To request GPU on ICE.PACE:
+```bash
+# Request 1 GPU
+salloc -G1
+```
+
+
+To remove the environment:
+```bash
+conda deactivate
+conda env remove -n KL
+```
+
+To save the environment configuration:
+```bash
+conda env export > environment.yml
+```
+
+To recreate the environment on another machine:
+```bash
+conda env create -f environment.yml
+```
+
+
 ## Troubleshooting
 
 1. OpenMP Issues:
@@ -172,21 +205,3 @@ Example:
      ```bash
      export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
      ```
-
-## Environment Management
-
-To save the environment configuration:
-```bash
-conda env export > environment.yml
-```
-
-To recreate the environment on another machine:
-```bash
-conda env create -f environment.yml
-```
-
-To remove the environment:
-```bash
-conda deactivate
-conda env remove -n KL
-```
