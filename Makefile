@@ -17,10 +17,10 @@ LIBS = -L$(CONDA_PREFIX)/lib -llapack -lblas -llapacke
 DIRS = results
 
 # Targets
-.PHONY: all clean check_env build
+.PHONY: all clean check_env cKL cEIG
 
 # Default target
-all: clean_binary check_env build
+all: check_env cEIG cKL
 
 # Check conda environment
 check_env:
@@ -40,24 +40,23 @@ check_env:
 	fi
 
 
-# Build target for actual compilation
-build: EIG KL
-	@echo
 # Compile EIG executable
-EIG: cEIG.cpp
+cEIG: cEIG.cpp
 	@echo "Building EIG:" 
+	rm -f cEIG
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
 	@echo
 
 # Compile KL executable
-KL: cKL.cpp
-	@echo "Building KL:" 
+cKL: cKL.cpp
+	@echo "Building KL:"
+	rm -f cKL
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
 	@echo
 
 # Clean target
 clean_binary:
-	rm -f EIG KL
+	rm -f cEIG cKL
 
 clean: clean_binary
 	rm -rf $(DIRS)

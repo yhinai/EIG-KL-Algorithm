@@ -63,8 +63,8 @@ make
 ```
 
 This will create two executables:
-- `EIG`: Eigenvalue-based partitioning algorithm
-- `KL`: Kernighan-Lin partitioning algorithm (OpenMP-enabled)
+- `cEIG`: Eigenvalue-based partitioning algorithm
+- `cKL`: Kernighan-Lin partitioning algorithm (OpenMP-enabled)
 
 ## Usage
 
@@ -72,19 +72,19 @@ This will create two executables:
 
 1. Run EIG algorithm:
 ```bash
-./EIG <input_file>
+./cEIG <input_file>
 ```
 
 2. Run KL algorithm:
 ```bash
 # Run KL with automatic thread detection
-./KL <circuit_input_file>
+./cKL <circuit_input_file>
 
 # Run KL with EIG initialization
-./KL <circuit_input_file> -EIG
+./cKL <circuit_input_file> -EIG
 
 # Run KL with specific number of threads
-OMP_NUM_THREADS=4 ./KL <circuit_input_file>
+OMP_NUM_THREADS=4 ./cKL <circuit_input_file>
 ```
 
 ### Output Files
