@@ -86,7 +86,7 @@ float getEdgeWeight(const sparseMatrix& spMat, int node1, int node2) {
 }
 
 void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
-    cout << "\n============= Reading Input File =============\n";
+    cout << "\n============= Reading Input File ==============\n";
     ifstream fin(filename);
     if (!fin.is_open()) {
         cerr << "Error opening file: " << filename << endl;
@@ -98,8 +98,9 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
     long int netsNum, nodesNum;
     stringstream(line) >> netsNum >> nodesNum;
     
-    cout << "Network Statistics:\n";
-    cout << "  - Total Nets: " << netsNum << "\n";
+
+    cout << "Circuit Statistics\n";
+    cout << "  - Total Nets : " << netsNum << "\n";
     cout << "  - Total Nodes: " << nodesNum << "\n";
     
     // Reinitialize sparse matrix with correct size
@@ -108,9 +109,7 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
     long int nonZeroElements = 0;
     vector<int> nodes;
     nodes.reserve(1000);  // Pre-allocate space
-    
-    cout << "\nProcessing nets and building sparse matrix...\n";
-    
+        
     // Process each net
     for (int i = 0; i < netsNum; i++) {
         getline(fin, line);
@@ -141,27 +140,21 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
         }
     }
     
-    // Calculate memory usage
-    double fullMatrixSize = (double)(nodesNum * nodesNum * sizeof(float)) / (1024 * 1024);  // Size in MB
-    double sparseMatrixSize = (double)(nonZeroElements * (sizeof(float) + 2 * sizeof(int))) / (1024 * 1024);  // Size in MB
+    // Calculate memory usage - Size in MB
+    double fullMatrixSize = (double)(nodesNum * nodesNum * sizeof(float)) / (1024 * 1024);
+    double sparseMatrixSize = (double)(nonZeroElements * (sizeof(float) + 2 * sizeof(int))) / (1024 * 1024);
 
-    cout << "\n============= Matrix Statistics =============\n";
-    cout << "Matrix Dimensions:\n";
-    cout << "  - Full matrix size: " << nodesNum << " x " << nodesNum << "\n";
-    cout << "  - Non-zero elements: " << nonZeroElements << "\n";
-    
-    cout << "\nMemory Usage:\n";
-    cout << "  - Full matrix: " << fixed << setprecision(2) << fullMatrixSize << " MB\n";
-    cout << "  - Sparse matrix: " << fixed << setprecision(2) << sparseMatrixSize << " MB\n";
-    cout << "  - Memory saved: " << fixed << setprecision(2) << (fullMatrixSize - sparseMatrixSize) << " MB";
-    cout << " (" << fixed << setprecision(2) << (100.0 * (fullMatrixSize - sparseMatrixSize) / fullMatrixSize) << "%)\n";
-    
-    cout << "\nSparsity Analysis:\n";
-    cout << "  - Density: " << fixed << setprecision(4) 
+    cout << "\n\n============= Matrix Statistics ===============\n";
+    cout << "Matrix Dimensions\n";
+    cout << "  - Full matrix: " << nodesNum << " x " << nodesNum << "\n";
+    cout << "  - Non-zero   : " << nonZeroElements << "\n";
+    cout << "  - Density    : " << fixed << setprecision(3) 
          << (100.0 * nonZeroElements / (nodesNum * nodesNum)) << "%\n";
-    
-    cout << "==========================================\n\n";
-         
+
+    cout << "\nMemory Usage\n";
+    cout << "  - Full matrix  : " << fixed << setprecision(3) << fullMatrixSize << " MB\n";
+    cout << "  - Sparse matrix: " << fixed << setprecision(3) << sparseMatrixSize << " MB\n";
+                 
     fin.close();
 }
 
@@ -311,7 +304,7 @@ void swip(sparseMatrix& spMat, int num1, int num2) {
 }
 
 void KL(sparseMatrix& spMat) {
-    cout << "\n============= Starting KL Algorithm =============\n";
+    cout << "\n\n=========== Starting KL Algorithm =============\n";
     shuffleSparceMatrix(spMat);
     
     // Initialize node connections cache
@@ -347,13 +340,14 @@ void KL(sparseMatrix& spMat) {
         spMat.nodeGains[i] = connections(spMat, i);
     }
     
-    cout << "\n============= KL Iterations =============\n";
+    cout << "\n============================== KL Iterations ==============================";
+    cout << "\n---------------------------------------------------------------------------" << "\n";
     cout << setw(10) << "Iteration" 
          << setw(15) << "Cut Size" 
-         << setw(15) << "Gain" 
+         << setw(20) << "Gain (delta)" 
          << setw(15) << "Time (ms)" 
          << setw(15) << "Improvement" << "\n";
-    cout << string(70, '-') << "\n";
+    cout << string(75, '-') << "\n";
     
     auto total_start_time = chrono::high_resolution_clock::now();
     
@@ -400,9 +394,9 @@ void KL(sparseMatrix& spMat) {
             iteration++;
             float improvement = 100.0f * (1.0f - cutSize/initialCutSize);
             
-            cout << setw(10) << iteration 
-                 << setw(15) << fixed << setprecision(2) << cutSize 
-                 << setw(15) << fixed << setprecision(2) << gain 
+            cout << setw(8) << iteration 
+                 << setw(17) << fixed << setprecision(2) << cutSize 
+                 << setw(18) << fixed << setprecision(2) << gain 
                  << setw(15) << duration.count()
                  << setw(15) << fixed << setprecision(2) << improvement << "%\n";
                  
@@ -422,15 +416,14 @@ void KL(sparseMatrix& spMat) {
     auto total_duration = chrono::duration_cast<chrono::seconds>(total_end_time - total_start_time);
     
     globalMinCutSize = min(globalMinCutSize, minCutSize);
-    
-    cout << "\n============= Final Results =============\n";
-    cout << "  - Total iterations: " << iteration << "\n";
-    cout << "  - Initial cut size: " << initialCutSize << "\n";
-    cout << "  - Best cut size achieved: " << globalMinCutSize << "\n";
-    cout << "  - Overall improvement: " << fixed << setprecision(2) 
-         << 100.0 * (1.0 - globalMinCutSize/initialCutSize) << "%\n";
-    cout << "  - Total runtime: " << total_duration.count() << " seconds\n";
-    cout << "=========================================\n\n";
+
+    cout << "\n\n=============== Final Results =================\n";
+    cout << left << setw(24) << "Total iterations" << ": " << iteration << "\n";
+    cout << left << setw(24) << "Initial cut size" << ": " << fixed << setprecision(2) << initialCutSize << "\n";
+    cout << left << setw(24) << "Best cut size achieved" << ": " << globalMinCutSize << "\n";
+    cout << left << setw(24) << "Overall improvement" << ": " 
+         << fixed << setprecision(2) << 100.0 * (1.0 - globalMinCutSize/initialCutSize) << "%\n";
+    cout << left << setw(24) << "Total runtime" << ": " << total_duration.count() << " seconds\n";
     
     fout.close();
 }
@@ -482,9 +475,11 @@ int main(int argc, char *argv[]) {
         
         // Set number of threads for OpenMP
         #ifdef _OPENMP
-            int num_threads = omp_get_num_procs();
+            auto num_threads = omp_get_num_procs();
             omp_set_num_threads(num_threads);
-            cout << "Using " << num_threads << " threads" << endl;
+            cout << "\n\n=============== OpenMP Thread =================\n";
+            cout << "Number of cores: " << num_threads << endl;
+
         #endif
 
         // Run KL algorithm
