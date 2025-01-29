@@ -7,14 +7,19 @@
 #include <sstream>
 #include <limits>
 #include <chrono>
+#include <sys/stat.h>
+#include <filesystem>
 #include <cuda_runtime.h>
+#include <thread>
 
 // ---------------------------------------------------------------------
 // 1. GLOBALS & STRUCTS
 // ---------------------------------------------------------------------
 
-bool   EIG_init = false;
+// Add at the top with other globals
+bool EIG_init = false;
 std::string EIG_file;
+float gloableMin = std::numeric_limits<float>::max();
 
 struct sparseMatrix {
     unsigned int nodeNum;
@@ -42,9 +47,6 @@ struct sparseMatrix {
     // We'll keep a CPU vector<int> membershipOfNode, but also
     // allocate once on the GPU
 };
-
-// We'll track a global minimum cut found
-float gloableMin = std::numeric_limits<float>::max();
 
 // Error checking macro
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -208,11 +210,13 @@ void gpuConnections(
 // ---------------------------------------------------------------------
 void InitializeSparsMatrix(const std::string &filename, sparseMatrix & spMat)
 {
+    std::cout << "\n============= Reading Input File ==============\n";
     std::ifstream fin(filename.c_str());
     if(!fin.is_open()) {
         std::cerr << "Error opening file: " << filename << std::endl;
         exit(1);
     }
+    
     std::string line;
     std::getline(fin, line);
     int netsNum=0, nodesNum=0;
@@ -220,6 +224,11 @@ void InitializeSparsMatrix(const std::string &filename, sparseMatrix & spMat)
         std::stringstream ss(line);
         ss >> netsNum >> nodesNum;
     }
+    
+    std::cout << "Circuit Statistics\n";
+    std::cout << "  - Total Nets : " << netsNum << "\n";
+    std::cout << "  - Total Nodes: " << nodesNum << "\n";
+    
     spMat.nodeNum = nodesNum;
     spMat.Nodes.resize(nodesNum);
     spMat.Weights.resize(nodesNum);
@@ -269,10 +278,19 @@ void InitializeSparsMatrix(const std::string &filename, sparseMatrix & spMat)
     // Flatten adjacency for GPU
     buildFlattenedAdjacency(spMat);
 
-    std::cout << "Read file: " << filename << "\n"
-              << "netsNum: " << netsNum << ", nodeNum: " << nodesNum << "\n"
-              << "nonZeroElements(approx): " << nonZeroElements << "\n"
-              << "numEdges: " << numEdges << std::endl;
+    float fullMatrixSize = static_cast<float>(nodesNum * nodesNum * sizeof(float)) / (1024.0f * 1024.0f);
+    float sparseMatrixSize = static_cast<float>(nonZeroElements * (sizeof(float) + 2 * sizeof(int))) / (1024.0f * 1024.0f);
+    
+    std::cout << "\n============= Matrix Statistics ===============\n";
+    std::cout << "Matrix Dimensions\n";
+    std::cout << "  - Full matrix: " << nodesNum << " x " << nodesNum << "\n";
+    std::cout << "  - Non-zero   : " << nonZeroElements << "\n";
+    std::cout << "  - Density    : " << std::fixed << std::setprecision(3) 
+              << (100.0f * nonZeroElements / (static_cast<uint64_t>(nodesNum) * nodesNum)) << "%\n";
+    
+    std::cout << "\nMemory Usage\n";
+    std::cout << "  - Full matrix  : " << std::fixed << std::setprecision(3) << fullMatrixSize << " MB\n";
+    std::cout << "  - Sparse matrix: " << std::fixed << std::setprecision(3) << sparseMatrixSize << " MB\n";
 }
 
 // ---------------------------------------------------------------------
@@ -287,13 +305,14 @@ void shuffleSparceMatrix(sparseMatrix & spMat)
     if (EIG_init) {
         std::ifstream fEIG(EIG_file.c_str());
         if(!fEIG.is_open()){
-            std::cerr << "Error: EIG file not found." << std::endl;
+            std::cerr << "Error: EIG file not found: " << EIG_file << std::endl;
             exit(1);
         }
         // skip first two lines
         std::string line;
         std::getline(fEIG, line);
         std::getline(fEIG, line);
+        
         while(std::getline(fEIG, line)){
             std::stringstream ss(line);
             int i, side;
@@ -313,7 +332,7 @@ void shuffleSparceMatrix(sparseMatrix & spMat)
         return;
     }
 
-    // random
+    // random partition if not using EIG
     std::vector<int> all;
     all.reserve(spMat.nodeNum);
     for(unsigned int i=0; i<spMat.nodeNum; i++){
@@ -397,22 +416,22 @@ void swip(sparseMatrix &spMat, std::vector<int> &membership, int num1, int num2)
 // ---------------------------------------------------------------------
 void KL(sparseMatrix &spMat)
 {
-    std::cout << "Starting KL...\n";
+    std::cout << "\n=========== Starting KL Algorithm =============\n";
     shuffleSparceMatrix(spMat);
 
-    // 1) Build membership array: membership[node] = 0 or 1
+    // Build membership array
     std::vector<int> membership(spMat.nodeNum, -1);
-    for(auto n : spMat.split[0]) {
-        membership[n] = 0;
-    }
-    for(auto n : spMat.split[1]) {
-        membership[n] = 1;
-    }
+    for(auto n : spMat.split[0]) membership[n] = 0;
+    for(auto n : spMat.split[1]) membership[n] = 1;
 
-    // 2) Compute initial cut size from scratch once
     float cutSize = computeCutSize(spMat, membership);
+    float initialCutSize = cutSize;
     float bestCut = cutSize;
-    std::cout << "[Init] cutSize=" << cutSize << std::endl;
+
+    std::cout << "\nInitial Partition Information:\n";
+    std::cout << "  - Left partition size: " << spMat.split[0].size() << "\n";
+    std::cout << "  - Right partition size: " << spMat.split[1].size() << "\n";
+    std::cout << "  - Initial cut size: " << std::fixed << std::setprecision(3) << cutSize << "\n\n";
 
     // 3) Allocate big enough GPU arrays for remain & membership & out
     //    We'll reuse them every iteration
@@ -426,14 +445,24 @@ void KL(sparseMatrix &spMat)
 
     std::vector<float> con_1, con_2;
 
+    std::cout << "============================== KL Iterations ==============================\n";
+    std::cout << "---------------------------------------------------------------------------\n";
+    std::cout << std::setw(10) << "Iteration" 
+              << std::setw(15) << "Cut Size" 
+              << std::setw(20) << "Gain (delta)" 
+              << std::setw(15) << "Time (ms)"
+              << std::setw(15) << "Improvement" << "\n";
+    std::cout << "---------------------------------------------------------------------------\n";
+
     int count = 0;
     int terminate = 0;
     int terminateLimit = (int)(std::log2((double)spMat.nodeNum)) + 5;
+    auto total_start_time = std::chrono::high_resolution_clock::now();
 
-    // We loop while both remain sets are non-empty
+    // Main KL loop
     while(!spMat.remain[0].empty() && !spMat.remain[1].empty())
     {
-        auto t1 = std::chrono::high_resolution_clock::now();
+        auto iter_start = std::chrono::high_resolution_clock::now();
 
         // 4) GPU connections for partition 0 remain
         con_1.resize(spMat.remain[0].size());
@@ -473,7 +502,6 @@ void KL(sparseMatrix &spMat)
         float gain = (global_max_1 + global_max_2) - 2.0f * edgeW;
 
         // 8) Update cut size
-        float oldCut = cutSize;
         cutSize = cutSize - gain;  // if logic is correct, won't go negative
 
         if(cutSize < bestCut){
@@ -485,16 +513,20 @@ void KL(sparseMatrix &spMat)
 
         // 10) iteration stats
         count++;
-        auto t2 = std::chrono::high_resolution_clock::now();
-        double dt = std::chrono::duration<double>(t2 - t1).count();
-        std::cout << "[Iter " << count 
-                  << "] cutSize=" << cutSize
-                  << ", gain=" << gain
-                  << " (time=" << dt << "s)\n";
+        auto iter_end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(iter_end - iter_start);
+        float improvement = 100.0f * (1.0f - cutSize/initialCutSize);
+        
+        std::cout << std::setw(8) << count 
+                  << std::setw(17) << std::fixed << std::setprecision(2) << cutSize 
+                  << std::setw(18) << std::fixed << std::setprecision(2) << gain 
+                  << std::setw(15) << duration.count()
+                  << std::setw(15) << std::fixed << std::setprecision(2) << improvement << "%\n";
+        
+        // 10) update global min
+	    if(cutSize < gloableMin) gloableMin = cutSize;
 
-	if(cutSize < gloableMin) gloableMin = cutSize;
-
-        // 11) termination
+        // 11) Temperature: keep the search while no gain improvement
         if(gain <= 0.f){
             terminate++;
             if(terminate > terminateLimit){
@@ -518,12 +550,59 @@ void KL(sparseMatrix &spMat)
         cutSize = finalCheck; // force them consistent
     }
 
-    std::cout << "KL finished. BestCut=" << cutSize
-              << ", globalMin=" << gloableMin << std::endl;
+    auto total_end_time = std::chrono::high_resolution_clock::now();
+    auto total_duration = std::chrono::duration_cast<std::chrono::seconds>(total_end_time - total_start_time);
+
+    // Final results output
+    std::cout << "\n=============== Final Results =================\n";
+    std::cout << std::left << std::setw(24) << "Total iterations" << ": " << count << "\n";
+    std::cout << std::left << std::setw(24) << "Initial cut size" << ": " << std::fixed << std::setprecision(2) << initialCutSize << "\n";
+    std::cout << std::left << std::setw(24) << "Best cut size achieved" << ": " << bestCut << "\n";
+    std::cout << std::left << std::setw(24) << "Overall improvement" << ": " 
+              << std::fixed << std::setprecision(2) << 100.0f * (1.0f - bestCut/initialCutSize) << "%\n";
+    std::cout << std::left << std::setw(24) << "Total runtime" << ": " << total_duration.count() << " seconds\n";
+}
+
+
+// ---------------------------------------------------------------------
+// 11. HELPER: get base name from full path
+// ---------------------------------------------------------------------
+
+void createDir(const std::string& dirName) {
+    struct stat info;
+    if (stat(dirName.c_str(), &info) != 0) {
+        #ifdef _WIN32
+            _mkdir(dirName.c_str());
+        #else
+            mkdir(dirName.c_str(), 0755);
+        #endif
+    }
+}
+
+std::string getBaseName(const std::string& path) {
+    std::filesystem::path fp(path);
+    return fp.filename().string();
+}
+
+void printGPUInfo() {
+    int deviceCount = 0;
+    cudaGetDeviceCount(&deviceCount);
+    
+    std::cout << "\n================= GPU Info ===================\n";
+    for (int i = 0; i < deviceCount; i++) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        std::cout << "Device " << i << ": " << prop.name << "\n";
+        std::cout << "  Compute capability: " << prop.major << "." << prop.minor << "\n";
+        std::cout << "  Memory: " << prop.totalGlobalMem / (1024*1024*1024.0) << " GB\n";
+        std::cout << "  Max threads per block: " << prop.maxThreadsPerBlock << "\n";
+        std::cout << "  Max threads per multiprocessor: " << prop.maxThreadsPerMultiProcessor << "\n";
+        std::cout << "  Number of multiprocessors: " << prop.multiProcessorCount << "\n";
+    }
 }
 
 // ---------------------------------------------------------------------
-// main
+// Main function
 // ---------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
@@ -531,23 +610,41 @@ int main(int argc, char* argv[])
         std::cerr << "Usage: " << argv[0] << " <inputFile> [ -EIG ]\n";
         return 1;
     }
+
+    // Create necessary directories
+    createDir("results");
+    createDir("pre_saved_EIG");
+
     std::string inputFile = argv[1];
+    std::string baseName = getBaseName(inputFile);
+    
+    // Handle EIG flag
     if(argc == 3 && std::string(argv[2]) == "-EIG"){
         EIG_init = true;
-        EIG_file = "pre_saved_EIG/" + inputFile + "_out.txt";
+        EIG_file = "pre_saved_EIG/" + baseName + "_out.txt";
     }
 
-    // 1) Build adjacency from input
+    // Output file name for results
+    std::string foutName = "results/" + baseName;
+    foutName += EIG_init ? "_KL_CutSize_EIG_output.txt" : "_KL_CutSize_output.txt";
+
+    // 1) Print GPU info
+    printGPUInfo();
+
+    // 2) Build adjacency from input
     sparseMatrix spMat;
     InitializeSparsMatrix(inputFile, spMat);
 
-    // 2) Copy adjacency to GPU (one time)
+    // 3) Copy adjacency to GPU (one time)
     copyAdjacencyToDevice(spMat);
 
-    // 3) Run KL
+    // sleep for 3 seconds
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // 4) Run KL
     KL(spMat);
 
-    // 4) Cleanup
+    // 5) Cleanup
     freeDeviceAdjacency(spMat);
 
     std::cout << "Global Min Cut over runs: " << gloableMin << std::endl;
