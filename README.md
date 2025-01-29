@@ -29,6 +29,9 @@ conda init --all
 ## Environment Setup
 
 ```bash
+# Request 1 GPU
+salloc -G1
+
 # Clone the repository:
 git clone https://github.com/yhinai/EIG-KL-Algorithm.git
 cd EIG-KL-Algorithm
