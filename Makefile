@@ -1,28 +1,36 @@
-# Check if CONDA_PREFIX is set
+## Check if CONDA_PREFIX is set
 ifndef CONDA_PREFIX
 $(error CONDA_PREFIX is not set. Please activate your conda environment first: conda activate KL)
 endif
 
-# Compiler and flags
+
+## Compiler and flags
 CXX = g++
+NVCC = nvcc
 CXXFLAGS = -std=c++17 -O3 -Wall -Wextra \
            -I$(CONDA_PREFIX)/include \
            -I$(CONDA_PREFIX)/include/eigen3 \
            -fopenmp
+NVCCFLAGS = -O3 -arch=sm_90 -Xcompiler -fopenmp -use_fast_math -extended-lambda
 
-# Libraries
+
+## Libraries
 LIBS = -L$(CONDA_PREFIX)/lib -llapack -lblas -llapacke
 
-# Output directories
+
+## Output directories
 DIRS = results
 
-# Targets
-.PHONY: all clean check_env cKL cEIG
 
-# Default target
-all: check_env cEIG cKL
+## Targets
+.PHONY: all clean check_env cKL cEIG gKL
 
-# Check conda environment
+
+## Default target
+all: check_env cEIG cKL gKL
+
+
+## Check conda environment
 check_env:
 	@if [ -z "$$CONDA_PREFIX" ]; then \
 		echo "Error: CONDA_PREFIX is not set. Please activate your conda environment."; \
@@ -40,23 +48,34 @@ check_env:
 	fi
 
 
-# Compile EIG executable
+## Compile EIG executable
 cEIG: cEIG.cpp
 	@echo "Building EIG:" 
 	rm -f cEIG
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
 	@echo
 
-# Compile KL executable
+
+## Compile KL executable
 cKL: cKL.cpp
 	@echo "Building KL:"
 	rm -f cKL
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
 	@echo
 
-# Clean target
+
+## Compile gKL executable
+gKL: gKL.cu
+	@echo "Building gKL:"
+	rm -f gKL
+	$(NVCC) $(NVCCFLAGS) $< -o $@
+	@echo
+
+
+## Clean target
 clean_binary:
-	rm -f cEIG cKL
+	rm -f cEIG cKL gKL
+
 
 clean: clean_binary
 	rm -rf $(DIRS)

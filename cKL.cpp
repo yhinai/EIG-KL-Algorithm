@@ -33,14 +33,14 @@ string fout_name;
 
 // Optimized sparse matrix structure
 struct sparseMatrix {
-    unsigned int nodeNum;
-    vector<unordered_map<int, float>> adjacencyList;  // Store edges only once: if i < j then edge is in adjacencyList[i][j]
-    vector<int> split[2];
-    vector<int> remain[2];
-    vector<float> nodeGains;  // Cache for node gains
-    unordered_map<int, vector<int>> nodeConnections;  // Cache for node-to-node connections
+    size_t nodeNum;
+    vector<unordered_map<uint32_t, float>> adjacencyList;
+    vector<uint32_t> split[2];
+    vector<uint32_t> remain[2];
+    vector<float> nodeGains;
+    unordered_map<uint32_t, vector<uint32_t>> nodeConnections;
     
-    explicit sparseMatrix(unsigned int size) : nodeNum(size) {
+    explicit sparseMatrix(size_t size) : nodeNum(size) {
         try {
             adjacencyList.resize(size);
             nodeGains.resize(size, 0.0f);
@@ -50,22 +50,19 @@ struct sparseMatrix {
         }
     }
     
-    // Initialize node connections cache
     void initNodeConnections() {
         #pragma omp parallel for schedule(dynamic)
-        for (unsigned int i = 0; i < nodeNum; i++) {
-            vector<int> connected;
-            connected.reserve(adjacencyList[i].size() * 2);  // Reserve space for both directions
+        for (size_t i = 0; i < nodeNum; i++) {
+            vector<uint32_t> connected;
+            connected.reserve(adjacencyList[i].size() * 2);
             
-            // Add direct connections where i is smaller
             for (const auto& [j, _] : adjacencyList[i]) {
                 connected.push_back(j);
             }
             
-            // Add reverse connections where i is larger
-            for (unsigned int j = 0; j < i; j++) {
+            for (size_t j = 0; j < i; j++) {
                 if (adjacencyList[j].find(i) != adjacencyList[j].end()) {
-                    connected.push_back(j);
+                    connected.push_back(static_cast<uint32_t>(j));
                 }
             }
             
@@ -75,8 +72,7 @@ struct sparseMatrix {
     }
 };
 
-// Helper function to safely get edge weight
-float getEdgeWeight(const sparseMatrix& spMat, int node1, int node2) {
+float getEdgeWeight(const sparseMatrix& spMat, uint32_t node1, uint32_t node2) {
     if (node1 > node2) {
         swap(node1, node2);
     }
@@ -95,41 +91,36 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
 
     string line;
     getline(fin, line);
-    long int netsNum, nodesNum;
+    uint32_t netsNum, nodesNum;
     stringstream(line) >> netsNum >> nodesNum;
     
-
     cout << "Circuit Statistics\n";
     cout << "  - Total Nets : " << netsNum << "\n";
     cout << "  - Total Nodes: " << nodesNum << "\n";
     
-    // Reinitialize sparse matrix with correct size
     spMat = sparseMatrix(nodesNum);
     
-    long int nonZeroElements = 0;
-    vector<int> nodes;
-    nodes.reserve(1000);  // Pre-allocate space
+    uint64_t nonZeroElements = 0;
+    vector<uint32_t> nodes;
+    nodes.reserve(1000);
         
-    // Process each net
-    for (int i = 0; i < netsNum; i++) {
+    for (uint32_t i = 0; i < netsNum; i++) {
         getline(fin, line);
         stringstream ss(line);
         nodes.clear();
         
-        int node;
+        uint32_t node;
         while (ss >> node) {
-            nodes.push_back(node - 1);  // Convert to 0-based indexing
+            nodes.push_back(node - 1);
         }
         
         float weight = 1.0f / (nodes.size() - 1);
         
-        // Add edges between all pairs in the net (store only one direction)
         for (size_t j = 0; j < nodes.size(); j++) {
             for (size_t k = j + 1; k < nodes.size(); k++) {
-                int node1 = nodes[j];
-                int node2 = nodes[k];
+                uint32_t node1 = nodes[j];
+                uint32_t node2 = nodes[k];
                 
-                // Ensure node1 < node2 for consistent storage
                 if (node1 > node2) {
                     swap(node1, node2);
                 }
@@ -140,16 +131,15 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
         }
     }
     
-    // Calculate memory usage - Size in MB
-    double fullMatrixSize = (double)(nodesNum * nodesNum * sizeof(float)) / (1024 * 1024);
-    double sparseMatrixSize = (double)(nonZeroElements * (sizeof(float) + 2 * sizeof(int))) / (1024 * 1024);
+    float fullMatrixSize = static_cast<float>(nodesNum * nodesNum * sizeof(float)) / (1024.0f * 1024.0f);
+    float sparseMatrixSize = static_cast<float>(nonZeroElements * (sizeof(float) + 2 * sizeof(uint32_t))) / (1024.0f * 1024.0f);
 
     cout << "\n\n============= Matrix Statistics ===============\n";
     cout << "Matrix Dimensions\n";
     cout << "  - Full matrix: " << nodesNum << " x " << nodesNum << "\n";
     cout << "  - Non-zero   : " << nonZeroElements << "\n";
     cout << "  - Density    : " << fixed << setprecision(3) 
-         << (100.0 * nonZeroElements / (nodesNum * nodesNum)) << "%\n";
+         << (100.0f * nonZeroElements / (static_cast<uint64_t>(nodesNum) * nodesNum)) << "%\n";
 
     cout << "\nMemory Usage\n";
     cout << "  - Full matrix  : " << fixed << setprecision(3) << fullMatrixSize << " MB\n";
@@ -159,7 +149,6 @@ void InitializeSparsMatrix(const string& filename, sparseMatrix& spMat) {
 }
 
 void shuffleSparceMatrix(sparseMatrix& spMat) {
-    // Clear existing partitions
     for (auto& partition : spMat.split) partition.clear();
     for (auto& partition : spMat.remain) partition.clear();
     
@@ -171,12 +160,12 @@ void shuffleSparceMatrix(sparseMatrix& spMat) {
         }
         
         string line;
-        getline(fEIG, line);  // Skip first two lines
+        getline(fEIG, line);
         getline(fEIG, line);
         
         while (getline(fEIG, line)) {
-            int node, split_side;
-            double weight;
+            uint32_t node, split_side;
+            float weight;
             stringstream(line) >> node >> split_side >> weight;
             
             spMat.split[split_side].push_back(node);
@@ -184,8 +173,7 @@ void shuffleSparceMatrix(sparseMatrix& spMat) {
         }
         fEIG.close();
     } else {
-        // Random partitioning
-        vector<int> nodes(spMat.nodeNum);
+        vector<uint32_t> nodes(spMat.nodeNum);
         iota(nodes.begin(), nodes.end(), 0);
         
         random_device rd;
@@ -210,11 +198,11 @@ void shuffleSparceMatrix(sparseMatrix& spMat) {
 
 float calCutSize(const sparseMatrix& spMat) {
     float cutSize = 0.0f;
-    unordered_set<int> rightNodes(spMat.remain[1].begin(), spMat.remain[1].end());
+    unordered_set<uint32_t> rightNodes(spMat.remain[1].begin(), spMat.remain[1].end());
     
     #pragma omp parallel for reduction(+:cutSize) schedule(dynamic)
     for (size_t i = 0; i < spMat.remain[0].size(); i++) {
-        int node = spMat.remain[0][i];
+        uint32_t node = spMat.remain[0][i];
         // Check forward connections
         for (const auto& [neighbor, weight] : spMat.adjacencyList[node]) {
             if (rightNodes.count(neighbor)) {
@@ -222,7 +210,7 @@ float calCutSize(const sparseMatrix& spMat) {
             }
         }
         // Check backward connections
-        for (int neighbor : rightNodes) {
+        for (uint32_t neighbor : rightNodes) {
             if (neighbor < node) {
                 auto it = spMat.adjacencyList[neighbor].find(node);
                 if (it != spMat.adjacencyList[neighbor].end()) {
@@ -234,9 +222,9 @@ float calCutSize(const sparseMatrix& spMat) {
     return cutSize;
 }
 
-float connections(const sparseMatrix& spMat, int node) {
+float connections(const sparseMatrix& spMat, uint32_t node) {
     float external = 0.0f, internal = 0.0f;
-    unordered_set<int> leftNodes(spMat.split[0].begin(), spMat.split[0].end());
+    unordered_set<uint32_t> leftNodes(spMat.split[0].begin(), spMat.split[0].end());
     
     // Process forward edges
     for (const auto& [neighbor, weight] : spMat.adjacencyList[node]) {
@@ -248,7 +236,7 @@ float connections(const sparseMatrix& spMat, int node) {
     }
     
     // Process backward edges
-    for (int i = 0; i < node; i++) {
+    for (size_t i = 0; i < node; i++) {
         auto it = spMat.adjacencyList[i].find(node);
         if (it != spMat.adjacencyList[i].end()) {
             if (leftNodes.count(i)) {
@@ -262,40 +250,34 @@ float connections(const sparseMatrix& spMat, int node) {
     return external - internal;
 }
 
-void updateAffectedNodeGains(sparseMatrix& spMat, int node1, int node2) {
-    // Use vector instead of unordered_set for OpenMP compatibility
-    vector<int> affectedNodes;
+void updateAffectedNodeGains(sparseMatrix& spMat, uint32_t node1, uint32_t node2) {
+    vector<uint32_t> affectedNodes;
     affectedNodes.reserve(spMat.nodeConnections[node1].size() + spMat.nodeConnections[node2].size());
     
-    // Collect all nodes connected to either swapped node
-    for (int node : spMat.nodeConnections[node1]) {
+    for (uint32_t node : spMat.nodeConnections[node1]) {
         affectedNodes.push_back(node);
     }
-    for (int node : spMat.nodeConnections[node2]) {
+    for (uint32_t node : spMat.nodeConnections[node2]) {
         affectedNodes.push_back(node);
     }
     
-    // Remove duplicates
     sort(affectedNodes.begin(), affectedNodes.end());
     affectedNodes.erase(unique(affectedNodes.begin(), affectedNodes.end()), affectedNodes.end());
     
-    // Update gains only for affected nodes using standard index-based loop
     #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < affectedNodes.size(); i++) {
-        int node = affectedNodes[i];
+        uint32_t node = affectedNodes[i];
         spMat.nodeGains[node] = connections(spMat, node);
     }
 }
 
-void swip(sparseMatrix& spMat, int num1, int num2) {
-    // Remove from remain vectors
+void swip(sparseMatrix& spMat, uint32_t num1, uint32_t num2) {
     auto it1 = find(spMat.remain[0].begin(), spMat.remain[0].end(), num1);
     auto it2 = find(spMat.remain[1].begin(), spMat.remain[1].end(), num2);
     
     if (it1 != spMat.remain[0].end()) spMat.remain[0].erase(it1);
     if (it2 != spMat.remain[1].end()) spMat.remain[1].erase(it2);
     
-    // Update split vectors
     auto split1 = find(spMat.split[0].begin(), spMat.split[0].end(), num1);
     auto split2 = find(spMat.split[1].begin(), spMat.split[1].end(), num2);
     
@@ -307,7 +289,6 @@ void KL(sparseMatrix& spMat) {
     cout << "\n\n=========== Starting KL Algorithm =============\n";
     shuffleSparceMatrix(spMat);
     
-    // Initialize node connections cache
     cout << "Initializing node connections cache...\n";
     spMat.initNodeConnections();
     
@@ -317,14 +298,14 @@ void KL(sparseMatrix& spMat) {
         exit(1);
     }
     
-    int iteration = 0;
-    int terminate = 0;
-    int terminateLimit = log2(spMat.nodeNum) + 5;
+    uint32_t iteration = 0;
+    uint32_t terminate = 0;
+    uint32_t terminateLimit = static_cast<uint32_t>(log2(spMat.nodeNum)) + 5;
     float globalMinCutSize = numeric_limits<float>::max();
     
     float cutSize = calCutSize(spMat);
     float minCutSize = cutSize;
-    float initialCutSize = cutSize;  // Store initial cut size for improvement calculation
+    float initialCutSize = cutSize;
     
     cout << "\nInitial Partition Information:\n";
     cout << "  - Left partition size: " << spMat.split[0].size() << "\n";
@@ -334,10 +315,9 @@ void KL(sparseMatrix& spMat) {
     fout << "0\t" << cutSize << "\t0" << endl;
     
     cout << "Initializing node gains...\n";
-    // Initialize all node gains
     #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < spMat.nodeNum; i++) {
-        spMat.nodeGains[i] = connections(spMat, i);
+        spMat.nodeGains[i] = connections(spMat, static_cast<uint32_t>(i));
     }
     
     cout << "\n============================== KL Iterations ==============================";
@@ -356,35 +336,32 @@ void KL(sparseMatrix& spMat) {
         
         float maxGain = -numeric_limits<float>::max();
         float minGain = numeric_limits<float>::max();
-        int maxIdx = -1, minIdx = -1;
+        size_t maxIdx = SIZE_MAX, minIdx = SIZE_MAX;
         
-        // Find maximum gain in partition 0
         for (size_t i = 0; i < spMat.remain[0].size(); i++) {
-            int node = spMat.remain[0][i];
+            uint32_t node = spMat.remain[0][i];
             if (spMat.nodeGains[node] > maxGain) {
                 maxGain = spMat.nodeGains[node];
                 maxIdx = i;
             }
         }
         
-        // Find minimum gain in partition 1
         for (size_t i = 0; i < spMat.remain[1].size(); i++) {
-            int node = spMat.remain[1][i];
+            uint32_t node = spMat.remain[1][i];
             if (spMat.nodeGains[node] < minGain) {
                 minGain = spMat.nodeGains[node];
                 minIdx = i;
             }
         }
         
-        if (maxIdx >= 0 && minIdx >= 0) {
-            int node1 = spMat.remain[0][maxIdx];
-            int node2 = spMat.remain[1][minIdx];
-            float gain = maxGain - minGain - 2 * getEdgeWeight(spMat, node1, node2);
+        if (maxIdx != SIZE_MAX && minIdx != SIZE_MAX) {
+            uint32_t node1 = spMat.remain[0][maxIdx];
+            uint32_t node2 = spMat.remain[1][minIdx];
+            float gain = maxGain - minGain - 2.0f * getEdgeWeight(spMat, node1, node2);
             
             cutSize -= gain;
             minCutSize = min(minCutSize, cutSize);
             
-            // Swap nodes and update affected nodes
             swip(spMat, node1, node2);
             updateAffectedNodeGains(spMat, node1, node2);
             
@@ -402,7 +379,7 @@ void KL(sparseMatrix& spMat) {
                  
             fout << iteration << "\t" << cutSize << "\t" << gain << endl;
             
-            if (gain <= 0) {
+            if (gain <= 0.0f) {
                 if (++terminate > terminateLimit) break;
             } else {
                 terminate = 0;
@@ -422,7 +399,7 @@ void KL(sparseMatrix& spMat) {
     cout << left << setw(24) << "Initial cut size" << ": " << fixed << setprecision(2) << initialCutSize << "\n";
     cout << left << setw(24) << "Best cut size achieved" << ": " << globalMinCutSize << "\n";
     cout << left << setw(24) << "Overall improvement" << ": " 
-         << fixed << setprecision(2) << 100.0 * (1.0 - globalMinCutSize/initialCutSize) << "%\n";
+         << fixed << setprecision(2) << 100.0f * (1.0f - globalMinCutSize/initialCutSize) << "%\n";
     cout << left << setw(24) << "Total runtime" << ": " << total_duration.count() << " seconds\n";
     
     fout.close();
@@ -430,11 +407,11 @@ void KL(sparseMatrix& spMat) {
 
 void createDir(const string& dirName) {
     struct stat info;
-    if (stat(dirName.c_str(), &info) != 0) {  // Directory doesn't exist
+    if (stat(dirName.c_str(), &info) != 0) {
         #ifdef _WIN32
             _mkdir(dirName.c_str());
         #else
-            mkdir(dirName.c_str(), 0755);  // Read/write for owner, read for others
+            mkdir(dirName.c_str(), 0755);
         #endif
     }
 }
@@ -457,7 +434,7 @@ int main(int argc, char *argv[]) {
     }
 
     string input_file = argv[1];
-    string base_name = getBaseName(input_file);  // Extract just the filename without path
+    string base_name = getBaseName(input_file);
     fout_name = "results/" + base_name + "_KL_CutSize_output.txt";
 
     if (argc == 3 && strcmp(argv[2], "-EIG") == 0) {
@@ -467,22 +444,16 @@ int main(int argc, char *argv[]) {
     }
 
     try {
-        // Initialize with minimum size first to avoid large memory allocation
         sparseMatrix spMat(1);
-        
-        // Read file and properly initialize the matrix
         InitializeSparsMatrix(input_file, spMat);
         
-        // Set number of threads for OpenMP
         #ifdef _OPENMP
-            auto num_threads = omp_get_num_procs();
+            uint32_t num_threads = omp_get_num_procs();
             omp_set_num_threads(num_threads);
             cout << "\n\n=============== OpenMP Thread =================\n";
             cout << "Number of cores: " << num_threads << endl;
-
         #endif
 
-        // Run KL algorithm
         KL(spMat);
         
     } catch (const std::exception& e) {

@@ -87,6 +87,27 @@ This will create two executables:
 OMP_NUM_THREADS=4 ./cKL <circuit_input_file>
 ```
 
+### Building and Running gKL (CUDA Version)
+
+#### Building gKL
+
+```bash
+# Build the CUDA version
+make gKL
+```
+
+#### Running gKL on GPU Cluster (ICE.PACE)
+
+```bash
+# Request GPU allocation
+salloc -G1
+
+# Run the script
+./gKL <input_file>
+./gKL <input_file> [-EIG]
+```
+
+
 ### Output Files
 
 The algorithms generate output files in the `results/` directory:
